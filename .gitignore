@@ -62,6 +62,7 @@ dmypy.json
 *.env
 *.venv
 *env/
+*env.example
 *venv/
 ENV/
 env.bak/
