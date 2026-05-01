@@ -59,10 +59,10 @@ dmypy.json
 .mypy_cache/
 
 # Env vars / secrets
-.env
-.venv
-env/
-venv/
+*.env
+*.venv
+*env/
+*venv/
 ENV/
 env.bak/
 venv.bak/
