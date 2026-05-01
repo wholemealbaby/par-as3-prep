@@ -90,6 +90,153 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
+# ─── Sub-Issue / Parent Relationship Tracking ────────────────────────────────
+#
+# When a markdown file has a header section containing a **Parent:** field,
+# all issues parsed from that file are treated as sub-issues of the parent.
+# The script resolves the parent issue by its ID (e.g., "EP-01") and then
+# uses the GitHub GraphQL API to create the sub-issue relationship.
+#
+# If the GraphQL sub-issue mutation is not available (older API version),
+# the script falls back to embedding a parent reference in the issue body.
+
+
+def parse_file_header_parent(filepath):
+    """
+    Parse the header section of a markdown file to extract parent issue metadata.
+    
+    The header is the first section before any '---' separator.
+    Expected format:
+    
+        **Parent:** `EP-01` — Define evidence requirements per milestone
+        **Parent Source:** `.issues/evidence_planning.md`
+    
+    Returns a dict with 'parent_id' and 'parent_source' or None if no parent.
+    """
+    text = Path(filepath).read_text(encoding="utf-8")
+    # Get the first section (before first ---)
+    sections = re.split(r"\n---+\n", text)
+    header = sections[0].strip() if sections else ""
+    
+    parent_id = ""
+    parent_source = ""
+    
+    parent_match = re.search(r"\*\*Parent:\*\*\s*`([^`]+)`", header)
+    if parent_match:
+        parent_id = parent_match.group(1).strip()
+    
+    source_match = re.search(r"\*\*Parent Source:\*\*\s*`([^`]+)`", header)
+    if source_match:
+        parent_source = source_match.group(1).strip()
+    
+    if parent_id:
+        return {"parent_id": parent_id, "parent_source": parent_source}
+    return None
+
+
+def find_parent_issue(existing_issues, parent_info):
+    """
+    Find the parent GitHub Issue by its ID (e.g., "EP-01").
+    
+    Searches existing issues for a title starting with the parent ID,
+    or for the parent ID embedded in the issue body.
+    """
+    parent_id = parent_info["parent_id"]
+    
+    for issue in existing_issues:
+        title = issue.get("title", "").strip()
+        body = issue.get("body", "") or ""
+        
+        # Check if title starts with parent ID (e.g., "EP-01 · Define evidence...")
+        if title.startswith(parent_id):
+            return issue
+        
+        # Check body for issue ID marker
+        if f"Issue ID:** {parent_id}" in body:
+            return issue
+    
+    return None
+
+
+def create_sub_issue_relationship_via_graphql(child_issue_number, parent_issue_number):
+    """
+    Use GitHub's GraphQL API to establish a sub-issue relationship.
+    
+    This uses the 'addSubIssue' mutation which is available in the GitHub Issues API.
+    If it fails (e.g., not available for this token/version), returns False.
+    """
+    query = """
+    mutation($childId: ID!, $parentId: ID!) {
+        addSubIssue(input: { subIssueId: $childId, issueId: $parentId }) {
+            subIssue {
+                id
+                number
+            }
+        }
+    }
+    """
+    
+    # We need the global node IDs, not the issue numbers.
+    # First, convert issue numbers to node IDs.
+    node_query = """
+    query($owner: String!, $repo: String!, $childNumber: Int!, $parentNumber: Int!) {
+        child: repository(owner: $owner, name: $repo) {
+            issue(number: $childNumber) { id }
+        }
+        parent: repository(owner: $owner, name: $repo) {
+            issue(number: $parentNumber) { id }
+        }
+    }
+    """
+    
+    owner, repo = GITHUB_REPOSITORY.split("/")
+    
+    # Step 1: Get node IDs
+    node_result = graphql_query(node_query, {
+        "owner": owner,
+        "repo": repo,
+        "childNumber": child_issue_number,
+        "parentNumber": parent_issue_number,
+    })
+    
+    if not node_result or "data" not in node_result:
+        print(f"  ⚠️  Could not resolve node IDs for sub-issue relationship")
+        return False
+    
+    child_id = node_result["data"].get("child", {}).get("issue", {}).get("id")
+    parent_id = node_result["data"].get("parent", {}).get("issue", {}).get("id")
+    
+    if not child_id or not parent_id:
+        print(f"  ⚠️  Could not find node IDs for issues #{child_issue_number} / #{parent_issue_number}")
+        return False
+    
+    # Step 2: Create the sub-issue relationship
+    result = graphql_query(query, {
+        "childId": child_id,
+        "parentId": parent_id,
+    })
+    
+    if result and "data" in result and result["data"].get("addSubIssue"):
+        print(f"  🔗 Linked as sub-issue of #{parent_issue_number}")
+        return True
+    else:
+        errors = result.get("errors", []) if result else []
+        error_msgs = "; ".join(e.get("message", "") for e in errors)
+        print(f"  ⚠️  GraphQL sub-issue mutation failed: {error_msgs}")
+        return False
+
+
+def add_parent_reference_to_body(body, parent_issue_number):
+    """
+    Add a parent reference to the issue body as a fallback when GraphQL
+    sub-issue creation is not available.
+    """
+    ref_line = f"> **Parent Issue:** [#{parent_issue_number}](https://github.com/{GITHUB_REPOSITORY}/issues/{parent_issue_number})"
+    if ref_line not in body:
+        body = f"{ref_line}\n\n{body}"
+    return body
+
+
 # ─── Label Color Configuration ───────────────────────────────────────────────
 #
 # Map label names to bright, bold hex colors (without the leading #).
@@ -115,6 +262,10 @@ LABEL_COLORS = {
     "demo-prep": "ff6644",         # Bright coral
     "pg-requirement": "ff0044",    # Bright red
     "experiment": "aa44ff",        # Bright violet
+    "information-gathering": "88ddff",  # Light blue
+    "research": "ffcc88",          # Light orange
+    "hardware": "88aaff",          # Steel blue
+    "logistics": "88dd88",         # Sage green
     # Fallback / generic
     "bug": "ff0000",               # Red
     "enhancement": "0088ff",       # Blue
@@ -520,12 +671,29 @@ def main():
 
     print(f"\n📄 Found {len(md_files)} markdown file(s): {[f.name for f in md_files]}")
 
+    # Parse parent metadata from each file header
+    # This maps source_file -> parent_info for sub-issue relationships
+    file_parent_map = {}
+    for md_file in md_files:
+        parent_info = parse_file_header_parent(md_file)
+        if parent_info:
+            file_parent_map[str(md_file)] = parent_info
+            print(f"  📎 '{md_file.name}' has parent: {parent_info['parent_id']}")
+
     # Parse all issues from all files
     all_parsed_issues = []
     for md_file in md_files:
         print(f"\n--- Parsing: {md_file} ---")
         issues = parse_issues_from_markdown(md_file)
         print(f"  📝 Found {len(issues)} issue(s)")
+
+        # Attach parent info to each issue from this file
+        parent_info = file_parent_map.get(str(md_file))
+        if parent_info:
+            for issue in issues:
+                issue["parent_id"] = parent_info["parent_id"]
+                issue["parent_source"] = parent_info["parent_source"]
+
         all_parsed_issues.extend(issues)
 
     if not all_parsed_issues:
@@ -550,12 +718,23 @@ def main():
     existing_issues = get_existing_issues()
     print(f"  📋 Found {len(existing_issues)} existing issues")
 
+    # Resolve parent issues for sub-issue relationships
+    parent_issue_cache = {}  # parent_id -> parent issue dict
+    for md_file, parent_info in file_parent_map.items():
+        parent = find_parent_issue(existing_issues, parent_info)
+        if parent:
+            parent_issue_cache[parent_info["parent_id"]] = parent
+            print(f"  📎 Resolved parent '{parent_info['parent_id']}' → issue #{parent['number']}")
+        else:
+            print(f"  ⚠️  Could not find parent issue '{parent_info['parent_id']}' in existing issues")
+
     # Sync each parsed issue
     print("\n--- Syncing issues ---")
     synced_count = 0
     created_count = 0
     updated_count = 0
     skipped_count = 0
+    sub_issue_count = 0
 
     for parsed in all_parsed_issues:
         print(f"\n  🔍 Processing: {parsed['title']}")
@@ -571,6 +750,7 @@ def main():
                 add_issue_to_project(issue_number)
             else:
                 skipped_count += 1
+                continue
         else:
             # Issue doesn't exist — create it
             result = create_issue(parsed)
@@ -582,6 +762,37 @@ def main():
                 add_issue_to_project(issue_number)
             else:
                 skipped_count += 1
+                continue
+
+        # If this issue has a parent, establish the sub-issue relationship
+        parent_id = parsed.get("parent_id")
+        if parent_id and parent_id in parent_issue_cache:
+            parent_issue = parent_issue_cache[parent_id]
+            parent_number = parent_issue["number"]
+
+            # Try GraphQL sub-issue relationship first
+            linked = create_sub_issue_relationship_via_graphql(issue_number, parent_number)
+            if linked:
+                sub_issue_count += 1
+            else:
+                # Fallback: add parent reference to issue body
+                print(f"  📝 Adding parent reference to issue body (fallback)")
+                # Fetch current issue to get latest body
+                current = api_request(
+                    "GET",
+                    f"{API_BASE}/repos/{GITHUB_REPOSITORY}/issues/{issue_number}",
+                )
+                if current:
+                    current_body = current.get("body", "") or ""
+                    new_body = add_parent_reference_to_body(current_body, parent_number)
+                    if new_body != current_body:
+                        api_request(
+                            "PATCH",
+                            f"{API_BASE}/repos/{GITHUB_REPOSITORY}/issues/{issue_number}",
+                            {"body": new_body},
+                        )
+                        print(f"  🔗 Referenced parent #{parent_number} in issue body")
+                        sub_issue_count += 1
 
         synced_count += 1
 
@@ -593,6 +804,7 @@ def main():
     print(f"  Created:                {created_count}")
     print(f"  Updated:                {updated_count}")
     print(f"  Skipped (errors):       {skipped_count}")
+    print(f"  Sub-issue links made:   {sub_issue_count}")
     print(f"  Synced to Project #{PROJECT_ID}:   {synced_count - skipped_count}")
     print("=" * 60)
 

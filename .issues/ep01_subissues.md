@@ -4,8 +4,9 @@
 >
 > Each sub-issue is a self-contained investigation task. Assign to the team member best positioned to answer the question.
 >
-> **Parent:** [`EP-01`](.issues/evidence_planning.md) · Define evidence requirements per milestone
-> **Reference:** [`docs/robocup_soccer_spec.md`](docs/robocup_soccer_spec.md)
+> **Parent:** `EP-01` — Define evidence requirements per milestone
+> **Parent Source:** `.issues/evidence_planning.md`
+> **Reference:** `docs/robocup_soccer_spec.md`
 > **Labels:** `evidence` `planning` `information-gathering`
 > **Milestone:** Planning Phase (Week 9–11)
 
