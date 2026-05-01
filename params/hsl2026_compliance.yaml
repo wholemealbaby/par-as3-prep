@@ -1,0 +1,313 @@
+# HSL 2026 Compliance Parameters
+# ===============================
+# Source: docs/hsl-rulebook.txt — RoboCup Humanoid Soccer League 2026 Working Rules
+# Purpose: ROS2 parameter configuration containing all necessary constants
+#          for HSL compliance, organised by subsystem.
+#
+# Usage: Load this file in a ROS2 node or launch file, e.g.:
+#   node:
+#     ros__parameters:
+#       include: params/hsl2026_compliance.yaml
+#
+# Or load programmatically:
+#   import rclpy
+#   from rclpy.parameter import Parameter
+#   node.declare_parameters_from_yaml("params/hsl2026_compliance.yaml")
+
+/**:
+  ros__parameters:
+
+    # =========================================================================
+    # FIELD DIMENSIONS
+    # Source: §1.6, Table 2 — Exemplary M-Field (Middle Division)
+    # The Booster K1 is an approved standard platform (§3.6) and falls under
+    # the Middle Division (Htop ≤ 1.25 m, §3.5.2).
+    # Middle Division can be played on S-Field or M-Field.
+    # =========================================================================
+    field:
+      # Field dimensions (M-Field exemplary values)
+      length: 14.0                # metres (§1.6, Table 2, ID: A)
+      width: 9.0                  # metres (§1.6, Table 2, ID: B)
+      border_strip_width: 1.0     # metres, minimum (§1.6, Table 2, ID: K)
+
+      # Goal dimensions (Middle Division)
+      goal_width: 2.5             # metres, range 2.4–2.6 (Table 3)
+      goal_height: 1.7            # metres, range 1.5–1.9 (Table 3)
+      goal_depth: 0.95            # metres, range 0.7–1.2 (Table 3)
+      goal_post_width: 0.10       # metres, range 0.07–0.12 (§1.7)
+
+      # Goal area (Table 2, IDs: E, F)
+      goal_area_length: 1.0       # metres
+      goal_area_width: 4.0        # metres
+
+      # Penalty area (Table 2, IDs: G, H)
+      penalty_area_length: 3.0    # metres
+      penalty_area_width: 6.0     # metres
+      penalty_mark_distance: 2.0  # metres from goal line (Table 2, ID: I)
+
+      # Centre circle (Table 2, ID: J)
+      centre_circle_diameter: 3.0 # metres
+      centre_circle_radius: 1.5   # metres (computed: diameter / 2)
+
+      # Corner arc (Table 2, ID: L)
+      corner_arc_radius: 0.5      # metres (M-Field)
+
+      # Lines
+      line_width_min: 0.05        # metres, 5 cm (§1.2)
+      line_width_max: 0.12        # metres, 12 cm (§1.2)
+      line_width_nominal: 0.08    # metres, 8 cm (typical mid-point)
+      penalty_mark_size: 0.10     # metres (Table 2)
+      centre_mark_size: 0.10      # metres (Table 2)
+
+      # Surface
+      turf_colour: "green"        # must contrast with ball and markings (§1.1)
+      line_colour: "white"        # tape, paint, or white turf (§1.2)
+
+    # =========================================================================
+    # BALL SPECIFICATIONS
+    # Source: §2, Table 4
+    # Middle Division uses FIFA size 3 or 4.
+    # =========================================================================
+    ball:
+      type: "FIFA_size_4"         # FIFA size 3 or 4 for Middle Division
+      diameter: 0.195             # metres (FIFA size 4: ~195 mm)
+      mass: 0.350                 # kilograms (FIFA size 4: ~350 g)
+      colour_primary: "orange"    # typical RoboCup ball colour
+      colour_secondary: "white"   # typical panel colour
+
+    # =========================================================================
+    # ROBOT CONSTRAINTS
+    # Source: §3.5 — Robot Players
+    # Booster K1 is an approved standard platform (§3.6).
+    # =========================================================================
+    robot:
+      # Division classification
+      division: "Middle"          # Small, Middle, or Large (§3.1)
+      max_height: 1.25            # metres, Htop ≤ 1.25 m for Middle (§3.5.2)
+      max_weight: 25.0            # kilograms, Middle Division (§3.5.3)
+      bmi_min: 5.0                # Body-Mass Index minimum (§3.5.3)
+      bmi_max: 30.0               # Body-Mass Index maximum (§3.5.3)
+
+      # Body proportions (§3.5.2)
+      leg_length_ratio_min: 0.35  # Hleg/Htop minimum
+      leg_length_ratio_max: 0.70  # Hleg/Htop maximum
+      arm_span_ratio_min: 0.80    # Aspan/Htop minimum
+      arm_span_ratio_max: 1.20    # Aspan/Htop maximum
+      head_height_ratio_min: 0.10 # Hhead/Htop minimum
+      head_height_ratio_max: 0.30 # Hhead/Htop maximum
+
+      # Locomotion constraints (§3.5.1)
+      allowed_locomotion: ["bipedal_walking", "running", "jumping"]
+      requires_fall_recovery: true
+      max_stance_width_ratio: 1.5 # times shoulder width (§12.2.4)
+
+    # =========================================================================
+    # SENSOR CONSTRAINTS
+    # Source: §3.8, Table 6
+    # =========================================================================
+    sensors:
+      # Camera / visual (§3.8.2)
+      camera_location: "head"     # must be in the head
+      fov_horizontal_max: 180.0   # degrees, human-like limit (§3.8.2)
+      fov_vertical_max: 140.0     # degrees, human-like limit (§3.8.2)
+      dynamic_fov_horizontal_max: 340.0  # degrees, with head movement
+      dynamic_fov_vertical_max: 220.0    # degrees, with head movement
+      spectral_range: "visible"   # restricted to human-visible light
+
+      # Depth perception (§3.8.3)
+      depth_sensor_passive_allowed: true   # stereo cameras encouraged
+      depth_sensor_active_allowed: true    # IR projector/ToF — discouraged
+      depth_sensor_active_discouraged: true
+
+      # Orientation (§3.8.4)
+      imu_allowed: true
+      compass_allowed: false       # magnetic sensors not allowed
+      imu_compass_must_be_disabled: true
+
+      # Distance sensors (§3.8.7)
+      max_1d_distance_sensors: 4   # limited to 4
+      distance_sensor_discouraged: true
+
+      # Sound (§3.8.5)
+      microphone_location: "head"
+      microphone_count_unlimited: true
+
+      # Haptic (§3.8.6)
+      haptic_sensors_allowed: true
+      haptic_sensor_locations: ["any"]
+
+    # =========================================================================
+    # COMMUNICATION CONSTRAINTS
+    # Source: §3.9
+    # =========================================================================
+    communication:
+      # General
+      autonomous_required: true    # no teleoperation/remote brain (§3.9)
+      off_board_processing: false  # prohibited (§3.9)
+      external_power: false        # prohibited (§3.9)
+
+      # WiFi (§3.9.2)
+      wifi_allowed: true
+      wifi_mode: "access_point"    # field-provided AP only; ad-hoc prohibited
+      bluetooth_prohibited: true   # near the field (§3.9.2)
+
+      # Robot-to-robot (§3.9.3)
+      r2r_protocol: "UDP_broadcast"
+      r2r_unicast_prohibited: true
+      max_payload_bytes: 512       # per message
+      max_messages_per_game: 12000 # total in Ready/Set/Playing states
+      additional_messages_per_minute_overtime: 600
+      udp_port_base: 10000         # port = 10000 + team_GC_number
+
+      # GameController (§3.9.4)
+      gc_broadcast_rate_hz: 2.0    # packets per second
+      gc_response_required: true
+      gc_status_updates_required: true
+
+      # Debug (§3.9.5)
+      debug_channel_allowed: true
+      debug_max_rate_hz: 1.0       # 1 packet per second
+      debug_destination: "wired_network_single_device"
+
+    # =========================================================================
+    # GAME TIMING
+    # Source: §7 — The Course of the Game
+    # =========================================================================
+    game_timing:
+      # Periods (§7.2)
+      half_duration_seconds: 600   # 10 minutes per half
+      half_time_break_minimum_seconds: 600  # 10 minutes minimum
+
+      # States (§7.1)
+      ready_state_duration_seconds: 45
+      set_to_playing_whistle_delay_seconds: 10  # for whistle detection (§7.1.3)
+
+      # Penalties (§12.2)
+      penalty_base_duration_seconds: 30
+      penalty_increment_seconds: 15
+
+      # Free kicks (§13.3.4)
+      free_kick_time_limit_seconds: 45
+
+      # Penalty kicks (§14.1.1)
+      penalty_kick_time_limit_seconds: 60
+
+      # Ball holding (§12.2.6)
+      ball_hold_max_seconds_field_player: 5
+      ball_hold_max_seconds_goalkeeper: 10
+
+      # Incapable robot (§12.2.4)
+      inactivity_timeout_seconds: 10
+      fallen_get_up_timeout_seconds: 20
+      fallen_max_get_up_attempts: 3
+      fallen_max_get_up_attempts_external_disturbance: 4
+
+      # Game stuck (§8.3)
+      local_game_stuck_ball_still_seconds: 10
+      global_game_stuck_no_proximity_seconds: 30
+      game_stuck_proximity_metres: 1.0
+
+      # Timeout (§7.7)
+      team_timeouts_per_game: 1
+      team_timeout_max_seconds: 300  # 5 minutes
+      referee_timeout_ready_seconds: 120  # 2 minutes to be ready
+
+      # Mercy rule (§7.8)
+      mercy_rule_goal_difference: 10
+
+      # Extra time (§10.3)
+      extra_time_periods: 2
+      extra_time_period_duration_seconds: 300  # 5 minutes each
+
+    # =========================================================================
+    # PLAYER CONFIGURATION
+    # Source: §3.2, Table 5
+    # =========================================================================
+    players:
+      # Middle Division
+      max_players_foundation: 3    # per team (§3.2, Table 5)
+      max_players_advanced: 5      # per team (§3.2, Table 5)
+      max_players_in_goal_area: 3  # during Set and Playing (§12.2.1)
+      goalkeeper_required_at_full_strength: true
+      jersey_numbers_range: [1, 20]  # §4.1
+      max_substitutes: "unlimited"   # §3.3
+
+    # =========================================================================
+    # KICKING RULES
+    # Source: §8 (Kick-off), §13 (Free Kicks), §14 (Penalty Kick)
+    # =========================================================================
+    kicking:
+      # Kick-off (§8.1)
+      kickoff_direct_goal_allowed: false
+      kickoff_min_touches_with_3plus_robots: 2  # two different robots
+      kickoff_min_touches_with_2_or_fewer: 1    # outside centre circle
+      kickoff_ball_in_play_timeout_seconds: 10  # or when kicked and moves
+
+      # Free kicks (§13)
+      free_kick_avoidance_radius: 1.5  # metres = centre circle radius (M-Field)
+      free_kick_direct_types: ["corner_kick", "goal_kick", "pushing_free_kick"]
+      free_kick_indirect_types: ["kick_in", "throw_in"]
+
+      # Penalty kick (§14.1)
+      penalty_kick_ready_duration_seconds: 30
+      penalty_kick_striker_second_touch_prohibited: true
+      penalty_kick_goalkeeper_must_stay_on_goal_line: true
+      penalty_kick_goalkeeper_no_diving_before_striker_touch: true
+
+      # Penalty shoot-out (§14.2)
+      shoot_out_kicks_per_team: 3
+      shoot_out_max_robots: 6       # per team, handed to referees
+
+    # =========================================================================
+    # LIGHTING CONDITIONS
+    # Source: §1.11
+    # =========================================================================
+    lighting:
+      illuminance_minimum_lux: 300       # preferably 400 lx
+      illuminance_preferred_lux: 400
+      colour: "predominantly_white"      # no coloured lighting
+      glare_expected: true
+      shadows_expected: true
+      mixed_lighting_expected: true
+      natural_light_allowed: true
+      artificial_light_allowed: true
+
+    # =========================================================================
+    # SAFETY
+    # Source: §3.10
+    # =========================================================================
+    safety:
+      emergency_stop_required: true
+      physical_stop_required: true
+      remote_estop_allowed: true
+      remote_estop_one_per_robot: true
+      remote_estop_no_additional_functions: true
+      gamecontroller_stop_compliance_required: true
+      passive_grip_points_required: true  # handles on back
+
+    # =========================================================================
+    # JERSEY / TEAM MARKERS
+    # Source: §4
+    # =========================================================================
+    jersey:
+      body_colour: "neutral"       # black, gray, white, or silver (§4.1)
+      body_non_reflective: true
+      jersey_type: "tank_top"      # covers ≥50% upper body, no arms
+      jersey_primary_colour_coverage_min: 0.50
+      jersey_numbers_visible: true
+      jersey_number_back: "large"
+      jersey_number_front: "small"
+      jersey_no_distracting_patterns: true
+      jersey_material_non_reflective: true
+      jersey_designs_required: 2   # two distinctly different solid colours
+      sponsorship_logo_max_coverage: 0.50
+
+    # =========================================================================
+    # TECHNICAL CHALLENGES
+    # Source: §5.2.1 (footnote 3)
+    # Note: Detailed technical challenge specifications are published
+    # separately by the Organizing Committee.
+    # =========================================================================
+    technical_challenges:
+      referee_calls_may_differ: true  # challenges may have specific call formats
+      separate_from_main_competition: true
