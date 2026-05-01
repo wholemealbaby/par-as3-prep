@@ -235,7 +235,7 @@ def parse_single_issue(section, source_file):
 
     # Generate a stable fingerprint for deduplication
     fingerprint = hashlib.sha256(
-        (title + source_file + issue_id).encode("utf-8")
+        (title + str(source_file) + issue_id).encode("utf-8")
     ).hexdigest()[:16]
 
     return {
