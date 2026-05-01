@@ -25,6 +25,7 @@ import json
 import hashlib
 import urllib.request
 import urllib.error
+import urllib.parse
 from pathlib import Path
 
 # ─── .env File Loader ────────────────────────────────────────────────────────
@@ -89,6 +90,47 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
+# ─── Label Color Configuration ───────────────────────────────────────────────
+#
+# Map label names to bright, bold hex colors (without the leading #).
+# Labels not in this map will be created with a default color.
+# To customise, add entries here or override via the LABEL_COLORS env variable
+# as a JSON object, e.g.:
+#   LABEL_COLORS='{"evidence":"00ff88","planning":"ff8800"}'
+
+DEFAULT_LABEL_COLOR = "aabbcc"
+
+LABEL_COLORS = {
+    # Evidence pipeline labels
+    "evidence": "00ff88",          # Bright green
+    "planning": "ff8800",          # Bright orange
+    "requirements": "ffdd00",      # Bright yellow
+    "test-design": "ff00ff",       # Bright magenta
+    "infrastructure": "00ccff",    # Bright cyan
+    "ros2": "8844ff",              # Bright purple
+    "vision": "ff4488",            # Bright pink
+    "metrics": "44ff44",           # Bright lime
+    "template": "ffaa00",          # Bright amber
+    "documentation": "4488ff",     # Bright blue
+    "demo-prep": "ff6644",         # Bright coral
+    "pg-requirement": "ff0044",    # Bright red
+    "experiment": "aa44ff",        # Bright violet
+    # Fallback / generic
+    "bug": "ff0000",               # Red
+    "enhancement": "0088ff",       # Blue
+    "question": "ff8800",          # Orange
+}
+
+# Allow override via environment variable
+_env_label_colors = os.environ.get("LABEL_COLORS")
+if _env_label_colors:
+    try:
+        overrides = json.loads(_env_label_colors)
+        LABEL_COLORS.update(overrides)
+        print(f"📋 Loaded {len(overrides)} label color override(s) from LABEL_COLORS env var")
+    except json.JSONDecodeError as e:
+        print(f"⚠️  Invalid LABEL_COLORS JSON: {e}. Using built-in colors.")
+
 # ─── HTTP Helpers ────────────────────────────────────────────────────────────
 
 
@@ -129,6 +171,52 @@ def graphql_query(query, variables=None):
     except Exception as e:
         print(f"⚠️  GraphQL request failed: {e}")
         return None
+
+
+# ─── Label Sync ──────────────────────────────────────────────────────────────
+
+
+def get_existing_labels():
+    """Fetch all labels for the repository."""
+    url = f"{API_BASE}/repos/{GITHUB_REPOSITORY}/labels?per_page=100"
+    result = api_request("GET", url)
+    if result is None:
+        return {}
+    return {label["name"]: label for label in result}
+
+
+def ensure_labels_exist(required_labels):
+    """
+    Ensure all required labels exist in the repository with the configured colors.
+    Creates or updates labels to have bright, bold colors.
+    """
+    existing = get_existing_labels()
+    repo_labels_url = f"{API_BASE}/repos/{GITHUB_REPOSITORY}/labels"
+
+    for label_name in required_labels:
+        color = LABEL_COLORS.get(label_name, DEFAULT_LABEL_COLOR)
+        description = f"Label: {label_name}"
+
+        if label_name in existing:
+            # Update if color differs
+            existing_color = existing[label_name].get("color", "")
+            if existing_color != color:
+                print(f"  🎨 Updating label color: '{label_name}' ({existing_color} → {color})")
+                api_request(
+                    "PATCH",
+                    f"{repo_labels_url}/{urllib.parse.quote(label_name, safe='')}",
+                    {"color": color, "description": description},
+                )
+            else:
+                print(f"  ✅ Label '{label_name}' already has color #{color}")
+        else:
+            # Create the label
+            print(f"  🎨 Creating label: '{label_name}' with color #{color}")
+            api_request(
+                "POST",
+                repo_labels_url,
+                {"name": label_name, "color": color, "description": description},
+            )
 
 
 # ─── Issue Parsing ───────────────────────────────────────────────────────────
@@ -445,6 +533,17 @@ def main():
         sys.exit(0)
 
     print(f"\n📊 Total parsed issues: {len(all_parsed_issues)}")
+
+    # Collect all unique labels across all issues and ensure they exist with bright colors
+    all_labels = set()
+    for parsed in all_parsed_issues:
+        all_labels.update(parsed["labels"])
+    if all_labels:
+        print(f"\n--- Ensuring labels exist with bright colors ---")
+        print(f"  🏷️  Labels to sync: {sorted(all_labels)}")
+        ensure_labels_exist(all_labels)
+    else:
+        print("\n  ℹ️  No labels found in parsed issues")
 
     # Fetch existing issues from GitHub
     print("\n--- Fetching existing issues from GitHub ---")
